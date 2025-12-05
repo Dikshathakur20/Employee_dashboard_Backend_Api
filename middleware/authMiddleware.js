@@ -1,37 +1,25 @@
+import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 dotenv.config();
 
 export const authMiddleware = (req, res, next) => {
-  // Allow both:  authorization & Authorization
-  const header = req.headers["authorization"] || req.headers["Authorization"];
-
+  const header = req.headers["authorization"];
   if (!header) {
-    return res.status(401).json({
-      status: false,
-      message: "Authorization header missing"
-    });
+    return res.status(401).json({ message: "Authorization header missing" });
   }
 
-  // Expected format: Bearer TOKEN
   const parts = header.split(" ");
-
   if (parts.length !== 2 || parts[0] !== "Bearer") {
-    return res.status(400).json({
-      status: false,
-      message: "Invalid Authorization format. Use: Bearer <token>"
-    });
+    return res.status(400).json({ message: "Invalid Authorization format" });
   }
 
   const token = parts[1];
 
-  // Compare with .env secret
-  if (token !== process.env.API_SECRET) {
-    return res.status(403).json({
-      status: false,
-      message: "Unauthorized: Invalid Token"
-    });
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded;   // ⭐ IMPORTANT
+    next();
+  } catch (err) {
+    return res.status(403).json({ message: "Invalid or expired token" });
   }
-
-  // If token is correct
-  next();
 };
