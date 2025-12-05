@@ -5,6 +5,6 @@ const router = express.Router();
 
 // Route for getting late attendance
 // Example: GET /api/attendance/late?year=2025&month=12
-router.get("/late"/*authMiddleware*/,getAttendanceLateComing);
+router.get("/late",authMiddleware,getAttendanceLateComing);
 
 export default router;
