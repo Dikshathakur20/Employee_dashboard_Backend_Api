@@ -4,6 +4,6 @@ import { getDashboardSummary } from "../controllers/dashboardController.js";
 
 const router = express.Router();
 
-router.get("/attendance-summary", authMiddleware, getDashboardSummary);
+router.get("/dashboard-charts/attendance-summary", /* authMiddleware*/ getDashboardSummary);
 
 export default router;
