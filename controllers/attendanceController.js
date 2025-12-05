@@ -11,9 +11,15 @@ const month = parseInt(req.query.month, 10);
         return res.status(400).json({ message: "Year and month are required" });
     }
 
+    // 1️⃣ Connect to database
     const pool = await poolPromise;
+    if (!pool) return res.status(500).json({ message: "Database not connected" });
 
-    // 1️⃣ Fetch all active employees excluding EmployeeId 6 and 9
+    // 2️⃣ Fetch all employees (optional, for reference)
+    const allEmployeesResult = await pool.request().query("SELECT * FROM tbl_Employees");
+    const allEmployees = allEmployeesResult.recordset;
+
+    // 3️⃣ Fetch active employees excluding EmployeeId 6 and 9
     const employeesQuery = `
         SELECT EmployeeId, Name
         FROM tbl_Employees
@@ -33,7 +39,7 @@ const month = parseInt(req.query.month, 10);
 
     const employeeIds = employees.map(e => e.EmployeeId);
 
-    // 2️⃣ Fetch late check-ins per employee per day
+    // 4️⃣ Fetch late check-ins per employee per day
     const checksQuery = `
         SELECT EmployeeId, CAST(CheckInTime AS DATE) AS CheckDate
         FROM tbl_EmployeeCheck
@@ -54,23 +60,26 @@ const month = parseInt(req.query.month, 10);
 
     const checks = (await request.query(checksQuery)).recordset;
 
-    // 3️⃣ Count late days per employee
+    // 5️⃣ Count late days per employee
     const lateMap = {};
     checks.forEach(c => {
         lateMap[c.EmployeeId] = (lateMap[c.EmployeeId] || 0) + 1;
     });
 
-    // 4️⃣ Build JSON response including employees with 0 late days
-    const result = employees.map(emp => ({
+    // 6️⃣ Build JSON response including employees with 0 late days
+    const results = employees.map(emp => ({
+        employeeId: emp.EmployeeId,
         name: emp.Name,
         lateDays: lateMap[emp.EmployeeId] || 0
     }));
 
+    // 7️⃣ Return response
     return res.json({
         year,
         month,
         monthName: new Date(year, month - 1).toLocaleString('en', { month: 'short' }),
-        employees: result
+        employees: results,   // <-- Correctly returning calculated lateDays
+        allEmployees // optional: return all employees data if needed
     });
 
 } catch (err) {
