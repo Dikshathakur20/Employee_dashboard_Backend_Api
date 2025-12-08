@@ -132,12 +132,43 @@ const getDailyReport = async () => {
 const getPreviousDayReport = async () => {
   const pool = await poolPromise;
 
-  const today = new Date();
-  const prev = new Date(today);
+  // Step 1: Load all holiday dates from DB
+  const holidayQuery = `
+    SELECT FestivalDate
+    FROM tbl_Holidays
+    WHERE IsDeleted = 0
+  `;
+  const holidayResult = await pool.request().query(holidayQuery);
+
+  // Convert holiday dates into a Set for fast lookup
+  const holidaySet = new Set(
+    holidayResult.recordset.map(h => 
+      new Date(h.FestivalDate).toISOString().split("T")[0]
+    )
+  );
+
+  // Step 2: Start from yesterday and go backwards until a working day
+  let prev = new Date();
   prev.setDate(prev.getDate() - 1);
+
+  const isWeekend = (date) => {
+    const day = date.getDay();
+    return day === 6 || day === 0; // Saturday(6) or Sunday(0)
+  };
+
+  const isHoliday = (date) => {
+    const formatted = date.toISOString().split("T")[0];
+    return holidaySet.has(formatted);
+  };
+
+  // Keep going back until we find a working day
+  while (isWeekend(prev) || isHoliday(prev)) {
+    prev.setDate(prev.getDate() - 1);
+  }
 
   const formattedPrev = prev.toISOString().split("T")[0];
 
+  // Step 3: Fetch check-ins from last valid working day
   const checkInQuery = `
     SELECT DISTINCT EmployeeId
     FROM tbl_EmployeeCheck
@@ -146,7 +177,7 @@ const getPreviousDayReport = async () => {
   `;
   const prevDayResult = await pool.request().query(checkInQuery);
 
-  // Total Active Employees excluding EmployeeId 6 & 9
+  // Step 4: Total active employees except 6 & 9
   const totalActiveQuery = `
     SELECT COUNT(*) AS totalActive
     FROM tbl_Employees
@@ -164,6 +195,7 @@ const getPreviousDayReport = async () => {
     notCheckedIn: totalActive - prevDayResult.recordset.length
   };
 };
+
 
 
 
