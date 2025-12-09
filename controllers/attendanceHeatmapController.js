@@ -1,32 +1,16 @@
 import { poolPromise } from "../config/db.js";
 
-// Full-day time slots (08:30 AM → 08:00 PM)
 const timeSlots = [
   "08:30 - 09:00", "09:00 - 09:30", "09:30 - 10:00",
-  "10:00 - 10:30", "10:30 - 11:00", "11:00 - 11:30",
-  "11:30 - 12:00", "12:00 - 12:30", "12:30 - 13:00",
-  "13:00 - 13:30", "13:30 - 14:00", "14:00 - 14:30",
-  "14:30 - 15:00", "15:00 - 15:30", "15:30 - 16:00",
-  "16:00 - 16:30", "16:30 - 17:00", "17:00 - 17:30",
-  "17:30 - 18:00", "18:00 - 18:30", "18:30 - 19:00",
-  "19:00 - 19:30", "19:30 - 20:00"
+  "10:00 - 10:30", "10:30 - 11:00", "11:00 - 11:30"
 ];
 
-// Convert time to slot index
-function getTimeSlotIndex(date) {
-  const minutes = date.getHours() * 60 + date.getMinutes();
-
+function getTimeSlotIndexUTC(date) {
+  const minutes = date.getUTCHours() * 60 + date.getUTCMinutes();
   const slotRanges = [
     [510, 540], [540, 570], [570, 600],
-    [600, 630], [630, 660], [660, 690],
-    [690, 720], [720, 750], [750, 780],
-    [780, 810], [810, 840], [840, 870],
-    [870, 900], [900, 930], [930, 960],
-    [960, 990], [990, 1020], [1020, 1050],
-    [1050, 1080], [1080, 1110], [1110, 1140],
-    [1140, 1170], [1170, 1200]
+    [600, 630], [630, 660], [660, 690]
   ];
-
   return slotRanges.findIndex(([start, end]) => minutes >= start && minutes < end);
 }
 
@@ -55,48 +39,61 @@ export async function getAttendanceHeatmap(req, res) {
       .query(query);
 
     const records = result.recordset;
+    console.log("Records fetched:", records);
 
-    // Dynamically build heatmap only for slots with records
+    // 1. Get all unique dates from records (ignore weekends)
+    const uniqueDates = Array.from(
+      new Set(
+        records
+          .map(r => {
+            const date = new Date(r.CheckInTime);
+            const day = date.getUTCDay();
+            if (day === 0 || day === 6) return null; // skip Sat & Sun
+            return date.toISOString().split("T")[0];
+          })
+          .filter(Boolean)
+      )
+    );
+
+    // 2. Sort descending to get latest dates first
+    uniqueDates.sort((a, b) => (a < b ? 1 : -1));
+
+    // 3. Pick last 5 recorded days
+    const last5Days = uniqueDates.slice(0, 5);
+
     const data = [];
 
-    records.forEach((row) => {
+    records.forEach(row => {
       if (!row.CheckInTime) return;
 
       const checkDate = new Date(row.CheckInTime);
       if (isNaN(checkDate)) return;
 
-      const day = checkDate.getDay(); // 0=Sun, 1=Mon
-      if (day === 0 || day === 6) return; // Skip weekends
+      const dateStr = checkDate.toISOString().split("T")[0];
+      if (!last5Days.includes(dateStr)) return;
 
-      const x = day - 1; // Mon=0
-      const y = getTimeSlotIndex(checkDate);
-      if (y === -1) return; // Skip times outside defined slots
+      const day = checkDate.getUTCDay();
+      const y = getTimeSlotIndexUTC(checkDate);
+      if (y === -1) return;
 
-      // Find existing slot
-      const existing = data.find(d => d.x === x && d.y === y);
+      const x = day - 1;
+
+      const existing = data.find(d => d.x === x && d.y === y && d.date === dateStr);
       if (existing) {
         existing.value += 1;
       } else {
-        data.push({
-          x,
-          y,
-          value: 1,
-          date: checkDate.toISOString().split("T")[0]
-        });
+        data.push({ x, y, value: 1, date: dateStr });
       }
     });
 
     return res.json({
       days: ["Mon", "Tue", "Wed", "Thu", "Fri"],
       timeSlots,
-      data,
+      data
     });
 
   } catch (error) {
     console.error("Heatmap Error:", error);
-    return res.status(500).json({
-      message: "Internal server error",
-      error: error.message,
-    });
+    return res.status(500).json({ message: "Internal server error", error: error.message });
   }
 }
