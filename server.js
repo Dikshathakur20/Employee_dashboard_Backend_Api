@@ -6,6 +6,9 @@ import dashboardRoutes from "./routes/dashboardRoutes.js";
 import attendanceRoutes from "./routes/attendanceRoutes.js";
 import leaveRoutes from "./routes/leaveRoutes.js";
 import leaveReportRoutes from "./routes/leaveReportRoutes.js";
+import employeeStatsRoutes from "./routes/employeeStatsRoutes.js";
+import employeeRoutes from "./routes/employeeRoutes.js";
+
 
 dotenv.config();
 const app = express();
@@ -18,6 +21,9 @@ app.use("/api", dashboardRoutes);
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api/leave-report", leaveRoutes);
 app.use("/api/dashboard-charts/leaves-report", leaveReportRoutes);
+app.use("/api", employeeStatsRoutes);
+app.use("/api/employee", employeeRoutes);
+
 
 
 // Global error handler
