@@ -1,9 +1,10 @@
 import express from "express";
 import { getYearlyLeaveReport } from "../controllers/leaveController.js";
-
+import { authMiddleware } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-router.get("/:year", getYearlyLeaveReport);
+router.get("/:year",authMiddleware, getYearlyLeaveReport);
+
 
 export default router;
