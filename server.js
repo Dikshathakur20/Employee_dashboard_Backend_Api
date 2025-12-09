@@ -9,6 +9,7 @@ import leaveReportRoutes from "./routes/leaveReportRoutes.js";
 import employeeStatsRoutes from "./routes/employeeStatsRoutes.js";
 import employeeRoutes from "./routes/employeeRoutes.js";
 import genderStatsRoutes from "./routes/genderStatsRoutes.js";
+import attendanceHeatmapRoutes from "./routes/attendanceHeatmapRoutes.js";
 
 
 dotenv.config();
@@ -25,6 +26,7 @@ app.use("/api/dashboard-charts/leaves-report", leaveReportRoutes);
 app.use("/api", employeeStatsRoutes);
 app.use("/api/employee", employeeRoutes);
 app.use("/api/dashboard-charts", genderStatsRoutes);
+app.use("/api/dashboard-charts", attendanceHeatmapRoutes);
 
 
 
