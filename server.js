@@ -10,6 +10,7 @@ import employeeStatsRoutes from "./routes/employeeStatsRoutes.js";
 import employeeRoutes from "./routes/employeeRoutes.js";
 import genderStatsRoutes from "./routes/genderStatsRoutes.js";
 import attendanceHeatmapRoutes from "./routes/attendanceHeatmapRoutes.js";
+import employeeSalaryRoutes from "./routes/employeeSalaryRoutes.js";
 
 
 dotenv.config();
@@ -27,7 +28,7 @@ app.use("/api", employeeStatsRoutes);
 app.use("/api/employee", employeeRoutes);
 app.use("/api/dashboard-charts", genderStatsRoutes);
 app.use("/api/dashboard-charts", attendanceHeatmapRoutes);
-
+app.use("/api", employeeSalaryRoutes);
 
 
 // Global error handler
