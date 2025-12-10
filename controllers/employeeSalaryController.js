@@ -1,5 +1,4 @@
 // controllers/employeeSalaryController.js
-
 import { poolPromise } from "../config/db.js";
 
 export const getEmployeeSalaries = async (req, res) => {
@@ -11,8 +10,7 @@ export const getEmployeeSalaries = async (req, res) => {
         EmployeeId AS id,
         Name AS name,
         Designation AS role,
-        CurrentSalary AS salary,
-        Picture AS profileImage
+        CurrentSalary AS salary
       FROM tbl_Employees
       WHERE 
         IsDeleted = 0
@@ -20,13 +18,13 @@ export const getEmployeeSalaries = async (req, res) => {
         AND EmployeeId NOT IN (6, 9)
     `);
 
-    // Format JSON like your example
+    // Format JSON like .NET API with profile image URL instead of full image
     const formattedData = result.recordset.map((emp) => ({
       id: "emp_" + emp.id,
       name: emp.name,
       role: emp.role,
       salary: emp.salary,
-      profileImage: emp.profileImage,
+      profileImage: `${process.env.BASE_URL}/employee/image/${emp.id}` // URL to fetch image separately
     }));
 
     return res.status(200).json({
