@@ -59,7 +59,7 @@ export async function getAttendanceHeatmap(req, res) {
     uniqueDates.sort((a, b) => (a < b ? 1 : -1));
 
     // 3. Pick last 5 recorded days
-    const last5Days = uniqueDates.slice(0, 5);
+    const last5Days = uniqueDates.slice(0, 7);
 
     const data = [];
 
