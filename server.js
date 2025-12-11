@@ -13,6 +13,8 @@ import attendanceHeatmapRoutes from "./routes/attendanceHeatmapRoutes.js";
 import employeeSalaryRoutes from "./routes/employeeSalaryRoutes.js";
 import employeeTreeRoutes from "./routes/employeeTreeRoutes.js";
 import employeedashboardRoutes from "./routes/employeeDashboardRoutes.js";
+import eventsCalendarRoutes from "./routes/eventsCalendarRoutes.js";
+
 
 dotenv.config();
 const app = express();
@@ -32,6 +34,7 @@ app.use("/api/dashboard-charts", attendanceHeatmapRoutes);
 app.use("/api", employeeSalaryRoutes);
 app.use("/api", employeeTreeRoutes);
 app.use("/api/dashboard-charts", employeedashboardRoutes);
+app.use("/api/dashboard-charts", eventsCalendarRoutes);
 
 
 // Global error handler
