@@ -30,14 +30,18 @@ export async function getGenderStats(req, res) {
       });
     }
 
-    // Create dynamic date filter
-    let dateFilter = `
-      YEAR(TRY_CONVERT(date, JoiningDate, 103)) <= @SelectedYear
-    `;
-
+    // Build filter date: last day of the month if month provided, else 31-Dec of year
+    let filterDate;
     if (selectedMonth) {
-      dateFilter += ` AND MONTH(TRY_CONVERT(date, JoiningDate, 103)) <= @SelectedMonth`;
+      // e.g., 2025-03-31
+      filterDate = new Date(selectedYear, selectedMonth, 0); // JS month: 0-based
+    } else {
+      // 31-Dec of year
+      filterDate = new Date(selectedYear, 11, 31);
     }
+
+    // Format as yyyy-mm-dd for SQL Server
+    const filterDateStr = filterDate.toISOString().split("T")[0]; // "YYYY-MM-DD"
 
     // 1️⃣ Gender Count Query
     const genderQuery = `
@@ -48,19 +52,14 @@ export async function getGenderStats(req, res) {
       WHERE 
         ActiveId = 1
         AND IsDeleted = 0
-        AND ${dateFilter}
+        AND TRY_CONVERT(date, JoiningDate, 103) <= @FilterDate
         AND Gender IN ('Male', 'Female')
       GROUP BY Gender
     `;
 
-    const genderRequest = pool.request()
-      .input("SelectedYear", sql.Int, selectedYear);
-
-    if (selectedMonth) {
-      genderRequest.input("SelectedMonth", sql.Int, selectedMonth);
-    }
-
-    const genderResult = await genderRequest.query(genderQuery);
+    const genderResult = await pool.request()
+      .input("FilterDate", sql.Date, filterDateStr)
+      .query(genderQuery);
 
     // 2️⃣ Total Employees Query
     const totalQuery = `
@@ -69,17 +68,12 @@ export async function getGenderStats(req, res) {
       WHERE
         ActiveId = 1
         AND IsDeleted = 0
-        AND ${dateFilter}
+        AND TRY_CONVERT(date, JoiningDate, 103) <= @FilterDate
     `;
 
-    const totalRequest = pool.request()
-      .input("SelectedYear", sql.Int, selectedYear);
-
-    if (selectedMonth) {
-      totalRequest.input("SelectedMonth", sql.Int, selectedMonth);
-    }
-
-    const totalResult = await totalRequest.query(totalQuery);
+    const totalResult = await pool.request()
+      .input("FilterDate", sql.Date, filterDateStr)
+      .query(totalQuery);
 
     return res.status(200).json({
       status: true,
