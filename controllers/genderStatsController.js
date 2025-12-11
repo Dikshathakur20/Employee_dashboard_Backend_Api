@@ -4,11 +4,20 @@ import { poolPromise } from "../config/db.js";
 export async function getGenderStats(req, res) {
   try {
     const selectedYear = parseInt(req.query.year, 10);
+    const selectedMonth = req.query.month ? parseInt(req.query.month, 10) : null;
 
+    // Validation
     if (!selectedYear) {
       return res.status(400).json({
         status: false,
         message: "Year is required (e.g., ?year=2025)"
+      });
+    }
+
+    if (selectedMonth && (selectedMonth < 1 || selectedMonth > 12)) {
+      return res.status(400).json({
+        status: false,
+        message: "Month must be between 1 and 12"
       });
     }
 
@@ -21,6 +30,15 @@ export async function getGenderStats(req, res) {
       });
     }
 
+    // Create dynamic date filter
+    let dateFilter = `
+      YEAR(TRY_CONVERT(date, JoiningDate, 103)) <= @SelectedYear
+    `;
+
+    if (selectedMonth) {
+      dateFilter += ` AND MONTH(TRY_CONVERT(date, JoiningDate, 103)) <= @SelectedMonth`;
+    }
+
     // 1️⃣ Gender Count Query
     const genderQuery = `
       SELECT 
@@ -30,14 +48,19 @@ export async function getGenderStats(req, res) {
       WHERE 
         ActiveId = 1
         AND IsDeleted = 0
-        AND YEAR(TRY_CONVERT(date, JoiningDate, 103)) <= @SelectedYear
+        AND ${dateFilter}
         AND Gender IN ('Male', 'Female')
       GROUP BY Gender
     `;
 
-    const genderResult = await pool.request()
-      .input("SelectedYear", sql.Int, selectedYear)
-      .query(genderQuery);
+    const genderRequest = pool.request()
+      .input("SelectedYear", sql.Int, selectedYear);
+
+    if (selectedMonth) {
+      genderRequest.input("SelectedMonth", sql.Int, selectedMonth);
+    }
+
+    const genderResult = await genderRequest.query(genderQuery);
 
     // 2️⃣ Total Employees Query
     const totalQuery = `
@@ -46,12 +69,17 @@ export async function getGenderStats(req, res) {
       WHERE
         ActiveId = 1
         AND IsDeleted = 0
-        AND YEAR(TRY_CONVERT(date, JoiningDate, 103)) <= @SelectedYear
+        AND ${dateFilter}
     `;
 
-    const totalResult = await pool.request()
-      .input("SelectedYear", sql.Int, selectedYear)
-      .query(totalQuery);
+    const totalRequest = pool.request()
+      .input("SelectedYear", sql.Int, selectedYear);
+
+    if (selectedMonth) {
+      totalRequest.input("SelectedMonth", sql.Int, selectedMonth);
+    }
+
+    const totalResult = await totalRequest.query(totalQuery);
 
     return res.status(200).json({
       status: true,
