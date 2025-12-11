@@ -6,11 +6,14 @@ const ALLOWED_EMAIL = "info@antheminfotech.com"; // only this email is allowed
 
 export const authMiddleware = (req, res, next) => {
   try {
-    // 1️⃣ Get token from query parameter only
-    const token = req.query.token;
+    // 1️⃣ Get token from Authorization header or query param
+    const authHeader = req.headers["authorization"];
+    const token =
+      (authHeader && authHeader.startsWith("Bearer ") && authHeader.split(" ")[1]) ||
+      req.query.token;
 
     if (!token) {
-      return res.status(401).json({ message: "Token is required in query params" });
+      return res.status(401).json({ message: "Token is required" });
     }
 
     // 2️⃣ Verify JWT
