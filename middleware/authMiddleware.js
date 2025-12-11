@@ -3,17 +3,17 @@ import dotenv from "dotenv";
 dotenv.config();
 
 export const authMiddleware = (req, res, next) => {
-  const token = req.query.token; // token comes only from URL
+  const token = req.query.token; // token from URL ONLY
 
-  if (token) {
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      req.user = decoded; // attach user if token is valid
-    } catch (err) {
-      console.warn("Invalid or expired token, continuing without user");
-    }
+  if (!token) {
+    return res.status(401).json({ message: "Token is required in URL" });
   }
 
-  // proceed regardless of token
-  next();
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch (err) {
+    return res.status(401).json({ message: "Invalid or expired token" });
+  }
 };
