@@ -5,12 +5,11 @@ export const getEmployeeStats = async (req, res) => {
     try {
         const pool = await poolPromise;
 
-        // Get year and month from query params (fallback to current)
+        // Get year (default = current year)
         const today = new Date();
-        const month = parseInt(req.query.month) || today.getMonth() + 1; // 1-12
         const year = parseInt(req.query.year) || today.getFullYear();
 
-        // Today and yesterday for check-in stats
+        // Today / Yesterday
         const todayDate = new Date();
         const yesterdayDate = new Date(todayDate);
         yesterdayDate.setDate(todayDate.getDate() - 1);
@@ -28,12 +27,52 @@ export const getEmployeeStats = async (req, res) => {
         const result = await pool.request()
             .input("Today", sql.VarChar, todayStr)
             .input("Yesterday", sql.VarChar, yesterdayStr)
-            .input("Month", sql.Int, month)
             .input("Year", sql.Int, year)
             .query(`
                 DECLARE @TodayDate DATE = TRY_CONVERT(date, @Today, 103);
                 DECLARE @YesterdayDate DATE = TRY_CONVERT(date, @Yesterday, 103);
 
+                ------------------------------------------------------------------
+                -- ⭐ NEW FIXED PENDING LEAVE LOGIC (CTE MUST BE OUTSIDE SELECT)
+                ------------------------------------------------------------------
+                WITH EmpAllowed AS (
+                    SELECT 
+                        E.EmployeeId,
+                        CASE 
+                            WHEN YEAR(TRY_CONVERT(date, E.JoiningDate, 103)) < @Year THEN 12
+                            WHEN YEAR(TRY_CONVERT(date, E.JoiningDate, 103)) = @Year
+                                 AND MONTH(TRY_CONVERT(date, E.JoiningDate, 103)) < 6 THEN 12
+                            ELSE 6
+                        END AS AllowedLeaves
+                    FROM tbl_Employees E
+                    WHERE 
+                        E.IsDeleted = 0 
+                        AND E.ActiveId = 1
+                        AND E.EmployeeId NOT IN (6,9)
+                ),
+                Approved AS (
+                    SELECT 
+                        L.EmployeeId,
+                        SUM(CAST(L.NoOfDays AS FLOAT)) AS ApprovedFullDays
+                    FROM tbl_LeaveDetails L
+                    WHERE 
+                        L.ApprovalStatus = 1
+                        AND CAST(L.NoOfDays AS FLOAT) >= 0.5
+                        AND YEAR(TRY_CONVERT(date, L.StartDate, 103)) = @Year
+                    GROUP BY L.EmployeeId
+                ),
+                EligibleEmployees AS (
+                    SELECT 
+                        A.EmployeeId
+                    FROM EmpAllowed A
+                    LEFT JOIN Approved Ap ON A.EmployeeId = Ap.EmployeeId
+                    WHERE 
+                        A.AllowedLeaves - ISNULL(Ap.ApprovedFullDays, 0) > 0
+                )
+
+                ------------------------------------------------------------------
+                -- ORIGINAL SELECT (UNCHANGED EXCEPT HIRING & RESIGNING YEAR FIX)
+                ------------------------------------------------------------------
                 SELECT 
                     -- ACTIVE EMPLOYEES
                     (SELECT COUNT(*) 
@@ -77,23 +116,32 @@ export const getEmployeeStats = async (req, res) => {
                        AND ApprovalStatus = 1
                     ) AS PrevOnLeave,
 
-                    -- HIRED THIS MONTH
+                    -- HIRED THIS YEAR ONLY (ignore month)
                     (SELECT COUNT(*)
                      FROM tbl_Employees
                      WHERE IsDeleted = 0
                        AND ActiveId = 1
-                       AND MONTH(TRY_CONVERT(date, JoiningDate, 103)) = @Month
                        AND YEAR(TRY_CONVERT(date, JoiningDate, 103)) = @Year
-                    ) AS HiringThisMonth,
+                    ) AS HiringThisYear,
 
-                    -- RESIGNED THIS MONTH
+                    -- RESIGNED THIS YEAR ONLY (ignore month)
                     (SELECT COUNT(*)
                      FROM tbl_Employees
                      WHERE IsDeleted = 0
                        AND ReleaseDate IS NOT NULL
-                       AND MONTH(TRY_CONVERT(date, ReleaseDate, 103)) = @Month
                        AND YEAR(TRY_CONVERT(date, ReleaseDate, 103)) = @Year
-                    ) AS ResignedThisMonth;
+                    ) AS ResignedThisYear,
+
+                    -- ⭐ FIXED PENDING LEAVES QUERY USING CTE RESULT
+                    (
+                        SELECT COUNT(*) 
+                        FROM tbl_LeaveDetails L
+                        INNER JOIN EligibleEmployees EE ON EE.EmployeeId = L.EmployeeId
+                        WHERE 
+                            L.ApprovalStatus = 0
+                            AND CAST(L.NoOfDays AS FLOAT) >= 0.5
+                            AND YEAR(TRY_CONVERT(date, L.StartDate, 103)) = @Year
+                    ) AS PendingLeaves
             `);
 
         const stats = result.recordset[0];
@@ -104,6 +152,7 @@ export const getEmployeeStats = async (req, res) => {
         const prevNotCheckedIn =
             stats.ActiveEmployees - stats.PrevCheckedIn - stats.PrevOnLeave;
 
+        // Final API response
         res.json({
             activeEmployees: stats.ActiveEmployees,
             checkedInToday: stats.CheckedInToday,
@@ -112,8 +161,9 @@ export const getEmployeeStats = async (req, res) => {
             prevCheckedIn: stats.PrevCheckedIn,
             prevNotCheckedIn: Math.max(prevNotCheckedIn, 0),
             prevOnLeave: stats.PrevOnLeave,
-            hiringThisMonth: stats.HiringThisMonth,
-            resignedThisMonth: stats.ResignedThisMonth
+            pendingLeaves: stats.PendingLeaves,
+            hiringThisYear: stats.HiringThisYear,
+            resignedThisYear: stats.ResignedThisYear
         });
 
     } catch (err) {
