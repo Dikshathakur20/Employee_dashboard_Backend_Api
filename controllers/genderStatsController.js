@@ -6,14 +6,13 @@ export async function getGenderStats(req, res) {
     const selectedYear = parseInt(req.query.year, 10);
     const selectedMonth = req.query.month ? parseInt(req.query.month, 10) : null;
 
-    // Validation
+    // ✅ Validations
     if (!selectedYear) {
       return res.status(400).json({
         status: false,
         message: "Year is required (e.g., ?year=2025)"
       });
     }
-
     if (selectedMonth && (selectedMonth < 1 || selectedMonth > 12)) {
       return res.status(400).json({
         status: false,
@@ -22,7 +21,6 @@ export async function getGenderStats(req, res) {
     }
 
     const pool = await poolPromise;
-
     if (!pool) {
       return res.status(500).json({
         status: false,
@@ -30,54 +28,64 @@ export async function getGenderStats(req, res) {
       });
     }
 
-    // Build filter date: last day of the month if month provided, else 31-Dec of year
-    let filterDate;
+    // ✅ Start and End of month/year
+    let startDate, endDate;
     if (selectedMonth) {
-      // e.g., 2025-03-31
-      filterDate = new Date(selectedYear, selectedMonth, 0); // JS month: 0-based
+      startDate = new Date(selectedYear, selectedMonth - 1, 1);
+      endDate = new Date(selectedYear, selectedMonth, 0);
     } else {
-      // 31-Dec of year
-      filterDate = new Date(selectedYear, 11, 31);
+      startDate = new Date(selectedYear, 0, 1);
+      endDate = new Date(selectedYear, 11, 31);
     }
 
-    // Format as yyyy-mm-dd for SQL Server
-    const filterDateStr = filterDate.toISOString().split("T")[0]; // "YYYY-MM-DD"
+    const startDateStr = startDate.toISOString().split("T")[0];
+    const endDateStr = endDate.toISOString().split("T")[0];
 
-    // 1️⃣ Gender Count Query
+    // ✅ Gender Count Query
     const genderQuery = `
       SELECT 
         Gender,
         COUNT(*) AS Count
       FROM tbl_Employees
       WHERE 
-        ActiveId = 1
-        AND IsDeleted = 0
-        AND TRY_CONVERT(date, JoiningDate, 103) <= @FilterDate
+        IsDeleted = 0
+        AND (
+          ActiveId = 1
+          OR (ActiveId = 2 AND ReleaseDate IS NOT NULL)
+        )
+        AND TRY_CONVERT(date, JoiningDate, 103) <= @EndDate
+        AND (ReleaseDate IS NULL OR TRY_CONVERT(date, ReleaseDate, 105) >= @StartDate)
         AND Gender IN ('Male', 'Female')
       GROUP BY Gender
     `;
 
     const genderResult = await pool.request()
-      .input("FilterDate", sql.Date, filterDateStr)
+      .input("StartDate", sql.Date, startDateStr)
+      .input("EndDate", sql.Date, endDateStr)
       .query(genderQuery);
 
-    // 2️⃣ Total Employees Query
+    // ✅ Total Employees Query
     const totalQuery = `
       SELECT COUNT(*) AS TotalEmployees
       FROM tbl_Employees
       WHERE
-        ActiveId = 1
-        AND IsDeleted = 0
-        AND TRY_CONVERT(date, JoiningDate, 103) <= @FilterDate
+        IsDeleted = 0
+        AND (
+          ActiveId = 1
+          OR (ActiveId = 2 AND ReleaseDate IS NOT NULL)
+        )
+        AND TRY_CONVERT(date, JoiningDate, 103) <= @EndDate
+        AND (ReleaseDate IS NULL OR TRY_CONVERT(date, ReleaseDate, 105) >= @StartDate)
     `;
 
     const totalResult = await pool.request()
-      .input("FilterDate", sql.Date, filterDateStr)
+      .input("StartDate", sql.Date, startDateStr)
+      .input("EndDate", sql.Date, endDateStr)
       .query(totalQuery);
 
     return res.status(200).json({
       status: true,
-      message: "Gender statistics fetched successfully",
+      message: `Gender statistics for ${selectedMonth || "year"}-${selectedYear} fetched successfully`,
       data: genderResult.recordset,
       totalEmployees: totalResult.recordset[0].TotalEmployees
     });
