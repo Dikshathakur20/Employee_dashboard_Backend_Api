@@ -2,24 +2,38 @@ import { poolPromise } from "../config/db.js";
 
 export const getEmployeesMonthlySummary = async (req, res) => {
   try {
-    const year = req.query.year;
-    if (!year) return res.status(400).json({ message: "Year is required" });
+    const year = parseInt(req.query.year);
+    if (!year) {
+      return res.status(400).json({ message: "Year is required" });
+    }
 
     const pool = await poolPromise;
 
+    // ❌ IDs to skip
+    const skipEmployeeIds = [102, 103, 104];
+
+    // ✅ FILTER AT SQL LEVEL (MOST IMPORTANT)
     const query = `
       SELECT 
         EmployeeId,
         Name,
         ActiveId,
         IsDeleted,
-        CONVERT(varchar, JoiningDate, 103) as JoiningDate,
-        CONVERT(varchar, ReleaseDate, 103) as ReleaseDate
+        CONVERT(varchar, JoiningDate, 103) AS JoiningDate,
+        CONVERT(varchar, ReleaseDate, 103) AS ReleaseDate
       FROM tbl_Employees
+      WHERE IsDeleted = 0
+        AND EmployeeId NOT IN (${skipEmployeeIds.join(",")})
     `;
 
     const result = await pool.request().query(query);
     const employees = result.recordset;
+
+    // ✅ Extra safety normalization (JS level)
+    const validEmployees = employees.filter(emp =>
+      Number(emp.IsDeleted) === 0 &&
+      !skipEmployeeIds.includes(Number(emp.EmployeeId))
+    );
 
     const months = [
       "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -28,101 +42,80 @@ export const getEmployeesMonthlySummary = async (req, res) => {
 
     const monthlySummary = months.map((month, index) => {
       const monthNumber = index + 1;
+      const resignedSet = new Set();
 
-      // ---------------------------
-      // RESIGNED EMPLOYEE LOGIC
-      // ---------------------------
-      // Track already counted resigned employees
-      // Track resigned employees already counted
-const countedResigned = new Set();
-
-const resignedEmployees = employees
-  .filter(emp => {
-
-    // ------------------------------
-    // Case 1: Employees with ReleaseDate
-    // ------------------------------
-    if (emp.ReleaseDate) {
-      const [d, m, y] = emp.ReleaseDate.split("-").map(Number);
-
-      return y === parseInt(year) && m === monthNumber;
-    }
-
-    // ------------------------------
-    // Case 2: ActiveId = 2 → resigned without ReleaseDate
-    // Show them ONLY after 2 months of Joining Date
-    // ------------------------------
-    if (emp.ActiveId == 2 && emp.JoiningDate) {
-      const [jDay, jMon, jYr] = emp.JoiningDate.split("/").map(Number);
-      const jDate = new Date(jYr, jMon - 1, jDay);
-      const twoMonthsAfterJoining = new Date(jYr, jMon + 1, jDay); // +2 months
-
-      // Employee should appear only in the month when 2 months are completed
-      if (
-        twoMonthsAfterJoining.getFullYear() === parseInt(year) &&
-        twoMonthsAfterJoining.getMonth() + 1 === monthNumber
-      ) {
-        if (!countedResigned.has(emp.EmployeeId)) {
-          countedResigned.add(emp.EmployeeId);
-          return true;
-        }
-      }
-    }
-
-    return false;
-  })
-  .map(emp => ({
-    name: emp.Name,
-    date: emp.ReleaseDate || " After 2 Months"
-  }));
-
-
-      // ---------------------------
-      // JOINED EMPLOYEES
-      // ---------------------------
-      const joinedEmployees = employees
-        .filter(emp => {
-          if (!emp.JoiningDate) return false;
-          const [d, m, y] = emp.JoiningDate.split("/").map(Number);
-          return y === parseInt(year) && m === monthNumber;
-        })
-        .map(emp => ({ name: emp.Name, date: emp.JoiningDate }));
-
-
-      // ---------------------------
-      // TOTAL ACTIVE EMPLOYEES
-      // ---------------------------
-      const totalActive = employees.filter(emp => {
-        // ❌ Skip inactive or deleted employees
-        if (emp.ActiveId == 2 || emp.IsDeleted == 1) return false;
-
-        if (!emp.JoiningDate) return false;
-
-        const [jDay, jMon, jYr] = emp.JoiningDate.split("/").map(Number);
-
-        // Skip if joined AFTER this month
-        if (
-          jYr > parseInt(year) ||
-          (jYr === parseInt(year) && jMon > monthNumber)
-        ) {
-          return false;
-        }
-
-        // Check release date
+      // ---------------- RESIGNED ----------------
+      const resignedEmployees = validEmployees.filter(emp => {
+        // Case 1: Has Release Date
         if (emp.ReleaseDate) {
-          const [rDay, rMon, rYr] = emp.ReleaseDate.split("/").map(Number);
+          const [d, m, y] = emp.ReleaseDate.split("-").map(Number);
+          return y === year && m === monthNumber;
+        }
 
-          // Skip if resigned BEFORE or IN this month
+        // Case 2: ActiveId = 2 → auto after 2 months
+        if (emp.ActiveId == 2 && emp.JoiningDate) {
+          const [jd, jm, jy] = emp.JoiningDate.split("/").map(Number);
+          const autoResign = new Date(jy, jm + 1, jd);
+
           if (
-            rYr < parseInt(year) ||
-            (rYr === parseInt(year) && rMon <= monthNumber)
+            autoResign.getFullYear() === year &&
+            autoResign.getMonth() + 1 === monthNumber &&
+            !resignedSet.has(emp.EmployeeId)
           ) {
-            return false;
+            resignedSet.add(emp.EmployeeId);
+            return true;
           }
         }
+        return false;
+      }).map(emp => ({
+        name: emp.Name,
+        date: emp.ReleaseDate || "After 2 Months"
+      }));
 
-        return true; 
-      }).length;
+      // ---------------- JOINED ----------------
+      const joinedEmployees = validEmployees.filter(emp => {
+        if (!emp.JoiningDate) return false;
+        const [d, m, y] = emp.JoiningDate.split("/").map(Number);
+        return y === year && m === monthNumber;
+      }).map(emp => ({
+        name: emp.Name,
+        date: emp.JoiningDate
+      }));
+
+// ---------------- TOTAL (EMPLOYEES PRESENT IN MONTH) ----------------
+const totalActive = validEmployees.filter(emp => {
+  if (!emp.JoiningDate) return false;
+
+  const currentIndex = year * 12 + monthNumber;
+
+  // JoiningDate → dd/MM/yyyy
+  const [jd, jm, jy] = emp.JoiningDate.split("/").map(Number);
+  const joinIndex = jy * 12 + jm;
+
+  // ❌ Joined after this month
+  if (joinIndex > currentIndex) return false;
+
+  // ---------------- CASE 1: JoiningDate + ReleaseDate present ----------------
+  if (emp.ReleaseDate) {
+    // ReleaseDate → dd-MM-yyyy
+    const [rd, rm, ry] = emp.ReleaseDate.split("-").map(Number);
+    const releaseIndex = ry * 12 + rm;
+
+    // ✅ Count only between joining and release
+    return currentIndex < releaseIndex;
+  }
+
+  // ---------------- CASE 2: ReleaseDate NULL ----------------
+  // Count ONLY if ActiveId = 1 and not deleted
+  if (emp.ActiveId == 1 && Number(emp.IsDeleted) === 0) {
+    return true;
+  }
+
+  // ❌ Everything else
+  return false;
+}).length;
+
+
 
 
       return {
