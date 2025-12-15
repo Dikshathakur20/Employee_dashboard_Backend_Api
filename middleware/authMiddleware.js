@@ -2,33 +2,68 @@
 import jwt from "jsonwebtoken";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
-const ALLOWED_EMAIL = "info@antheminfotech.com"; // only this email is allowed
+const ALLOWED_EMAIL = "info@antheminfotech.com";
 
 export const authMiddleware = (req, res, next) => {
-  try {
-    // 1️⃣ Get token from Authorization header or query param
-    const authHeader = req.headers["authorization"];
-    const token =
-      (authHeader && authHeader.startsWith("Bearer ") && authHeader.split(" ")[1]) ||
-      req.query.token;
+  console.log("🔐 Auth middleware hit");
 
-    if (!token) {
+  try {
+    // 1️⃣ Read Authorization header & query param
+    const authHeader = req.headers.authorization;
+    const queryToken = req.query.token;
+
+    console.log("📌 Authorization Header:", authHeader);
+    console.log("📌 Query Token:", queryToken);
+
+    let token;
+
+    // 2️⃣ Extract token safely
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      token = authHeader.split(" ")[1];
+      console.log("✅ Token extracted from HEADER");
+    } else if (queryToken) {
+      token = queryToken;
+      console.log("✅ Token extracted from QUERY");
+    } else {
+      console.log("❌ No token found");
       return res.status(401).json({ message: "Token is required" });
     }
 
-    // 2️⃣ Verify JWT
-    const decoded = jwt.verify(token, JWT_SECRET);
+    console.log("🧪 Final Token:", token);
 
-    // 3️⃣ Check email
-    if (decoded.email !== ALLOWED_EMAIL) {
+    // 3️⃣ Verify JWT
+    let decoded;
+    try {
+      decoded = jwt.verify(token, JWT_SECRET);
+      console.log("✅ Token verified successfully");
+      console.log("📦 Decoded Payload:", decoded);
+    } catch (jwtError) {
+      console.log("❌ JWT verification failed:", jwtError.message);
+      return res.status(401).json({ message: "Invalid or expired token" });
+    }
+
+    // 4️⃣ Check email authorization
+    if (!decoded.email) {
+      console.log("❌ Email missing in token payload");
+      return res.status(403).json({ message: "Email not present in token" });
+    }
+
+    if (decoded.email.trim().toLowerCase() !== ALLOWED_EMAIL) {
+      console.log("❌ Email mismatch");
+      console.log("Token Email:", decoded.email);
+      console.log("Allowed Email:", ALLOWED_EMAIL);
       return res.status(403).json({ message: "You don't have access" });
     }
 
-    // 4️⃣ Attach decoded payload to request
-    req.user = decoded;
+    console.log("✅ Email authorized");
 
-    next(); // allow access
+    // 5️⃣ Attach user & allow request
+    req.user = decoded;
+    console.log("🚀 Access granted\n");
+
+    next();
   } catch (err) {
-    return res.status(401).json({ message: "Invalid or expired token" });
+    console.log("🔥 Unexpected Auth Error:", err.message);
+    return res.status(500).json({ message: "Authentication failed" });
   }
 };
