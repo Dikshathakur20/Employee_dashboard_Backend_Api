@@ -91,6 +91,16 @@ export const getEmployeeStats = async (req, res) => {
                        AND EmployeeId NOT IN (6, 9)
                     ) AS CheckedInToday,
 
+                    -- LATE TODAY (check-in after 9:00 AM)
+                    (SELECT COUNT(DISTINCT EmployeeId)
+                     FROM tbl_EmployeeCheck
+                     WHERE TRY_CONVERT(date, Dated, 103) = @TodayDate
+                       AND IsDeleted = 0
+                       AND (IsLeave = 0 OR IsLeave IS NULL)
+                       AND EmployeeId NOT IN (6, 9)
+                       AND CAST(CONVERT(varchar, TRY_CONVERT(datetime, Dated, 103), 108) AS time) > '09:00:00'
+                    ) AS LateToday,
+
                     -- ON LEAVE TODAY
                     (SELECT COUNT(DISTINCT EmployeeId)
                      FROM tbl_LeaveDetails
@@ -158,6 +168,7 @@ export const getEmployeeStats = async (req, res) => {
             checkedInToday: stats.CheckedInToday,
             notCheckedInToday: Math.max(notCheckedInToday, 0),
             onLeaveToday: stats.OnLeaveToday,
+            lateToday: stats.LateToday,
             prevCheckedIn: stats.PrevCheckedIn,
             prevNotCheckedIn: Math.max(prevNotCheckedIn, 0),
             prevOnLeave: stats.PrevOnLeave,
