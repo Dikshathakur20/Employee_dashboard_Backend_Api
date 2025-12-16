@@ -2,13 +2,13 @@
 import jwt from "jsonwebtoken";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
-const ALLOWED_EMAIL = "info@antheminfotech.com";
+// ✅ Allow multiple emails
+const ALLOWED_EMAILS = ["info@antheminfotech.com", "nandani@antheminfotech.com"];
 
 export const authMiddleware = (req, res, next) => {
   console.log("🔐 Auth middleware hit");
 
   try {
-    // 1️⃣ Read Authorization header & query param
     const authHeader = req.headers.authorization;
     const queryToken = req.query.token;
 
@@ -17,7 +17,6 @@ export const authMiddleware = (req, res, next) => {
 
     let token;
 
-    // 2️⃣ Extract token safely
     if (authHeader && authHeader.startsWith("Bearer ")) {
       token = authHeader.split(" ")[1];
       console.log("✅ Token extracted from HEADER");
@@ -31,7 +30,6 @@ export const authMiddleware = (req, res, next) => {
 
     console.log("🧪 Final Token:", token);
 
-    // 3️⃣ Verify JWT
     let decoded;
     try {
       decoded = jwt.verify(token, JWT_SECRET);
@@ -42,22 +40,21 @@ export const authMiddleware = (req, res, next) => {
       return res.status(401).json({ message: "Invalid or expired token" });
     }
 
-    // 4️⃣ Check email authorization
     if (!decoded.email) {
       console.log("❌ Email missing in token payload");
       return res.status(403).json({ message: "Email not present in token" });
     }
 
-    if (decoded.email.trim().toLowerCase() !== ALLOWED_EMAIL) {
+    // ✅ Check if email is in allowed list
+    if (!ALLOWED_EMAILS.includes(decoded.email.trim().toLowerCase())) {
       console.log("❌ Email mismatch");
       console.log("Token Email:", decoded.email);
-      console.log("Allowed Email:", ALLOWED_EMAIL);
+      console.log("Allowed Emails:", ALLOWED_EMAILS.join(", "));
       return res.status(403).json({ message: "You don't have access" });
     }
 
     console.log("✅ Email authorized");
 
-    // 5️⃣ Attach user & allow request
     req.user = decoded;
     console.log("🚀 Access granted\n");
 
