@@ -18,12 +18,7 @@ function formatRecurringDate(dateValue, requestedYear) {
   return `${requestedYear}-${month}-${day}`;
 }
 
-// Normalize names to avoid duplicates
-function normalizeName(name) {
-  return name.toLowerCase().replace(/[^a-z0-9]/g, "").trim();
-}
-
-// Parse DB date (dd/MM/yyyy) to ISO format (YYYY-MM-DD)
+// Parse DB date (dd/MM/yyyy) to ISO format
 function parseDBDateToISO(dateStr) {
   if (!dateStr) return null;
   const [day, month, year] = dateStr.split("/").map(Number);
@@ -62,23 +57,23 @@ export const getEventsCalendar = async (req, res) => {
     `;
     const employeeResult = await pool.request().query(employeesQuery);
 
-    const eventsMap = new Map(); // key = date, value = {festivalNames: [], type: "Holiday"}
+    const eventsMap = new Map();
 
-    // Process Holidays
+    // -------------------- HOLIDAYS --------------------
     holidayResult.recordset.forEach((h) => {
       const festivalDateISO = parseDBDateToISO(h.FestivalDate);
       if (!festivalDateISO) return;
 
       const eventYear = parseInt(festivalDateISO.split("-")[0]);
-      if (eventYear !== requestedYear) return; // only requested year
+      if (eventYear !== requestedYear) return;
 
-      const dateKey = festivalDateISO;
-
-      if (!eventsMap.has(dateKey)) {
-        eventsMap.set(dateKey, { festivalNames: [h.FestivalName.trim()], type: "Holiday", ids: [h.HolidayId] });
+      if (!eventsMap.has(festivalDateISO)) {
+        eventsMap.set(festivalDateISO, {
+          festivalNames: [h.FestivalName.trim()],
+          ids: [h.HolidayId],
+        });
       } else {
-        const existing = eventsMap.get(dateKey);
-        // Combine festival names if multiple on same date
+        const existing = eventsMap.get(festivalDateISO);
         if (!existing.festivalNames.includes(h.FestivalName.trim())) {
           existing.festivalNames.push(h.FestivalName.trim());
         }
@@ -86,19 +81,26 @@ export const getEventsCalendar = async (req, res) => {
       }
     });
 
-    // Convert holiday map to array of events
     const events = [];
+
     eventsMap.forEach((value, date) => {
       events.push({
         id: `H-${value.ids.join("-")}`,
         title: value.festivalNames.join(" / "),
-        type: value.type,
+        type: "Holiday",
         date,
       });
     });
 
-    // Process Birthdays, Anniversaries, and Work-Year Completion
+    // Base image URL (same logic as salary API)
+    const baseImageUrl =
+      process.env.BASE_URL ||
+      "https://employee-dashboard-backend-api.vercel.app/api";
+
+    // -------------------- EMPLOYEE EVENTS --------------------
     employeeResult.recordset.forEach((emp) => {
+      const employeeImage = `${baseImageUrl}/employee/image/${emp.EmployeeId}`;
+
       // Birthday
       const birthdayDate = formatRecurringDate(emp.Birthday, requestedYear);
       if (birthdayDate) {
@@ -107,6 +109,8 @@ export const getEventsCalendar = async (req, res) => {
           title: `Birthday – ${emp.Name}`,
           type: "Event",
           date: birthdayDate,
+          employeeId: emp.EmployeeId,
+          employeeImage,
         });
       }
 
@@ -118,29 +122,39 @@ export const getEventsCalendar = async (req, res) => {
           title: `Anniversary – ${emp.Name}`,
           type: "Event",
           date: annDate,
+          employeeId: emp.EmployeeId,
+          employeeImage,
         });
       }
 
-      // Work-year completion (joining date anniversary)
+      // Work-year completion
       if (emp.JoiningDate) {
         const joiningYear = parseInt(emp.JoiningDate.split("/")[2]);
         const workYears = requestedYear - joiningYear;
+
         if (workYears > 0) {
-          const workAnniversaryDate = formatRecurringDate(emp.JoiningDate, requestedYear);
+          const workAnniversaryDate = formatRecurringDate(
+            emp.JoiningDate,
+            requestedYear
+          );
+
           events.push({
             id: `W-${emp.EmployeeId}`,
             title: `${workYears} year${workYears > 1 ? "s" : ""} completed – ${emp.Name}`,
             type: "Event",
             date: workAnniversaryDate,
+            employeeId: emp.EmployeeId,
+            employeeImage,
           });
         }
       }
     });
 
-    // Sort all events by date
+    // Sort by date
     events.sort((a, b) => new Date(a.date) - new Date(b.date));
 
     res.json({ success: true, events });
+
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, message: "Server Error" });
