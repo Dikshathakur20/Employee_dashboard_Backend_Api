@@ -14,6 +14,7 @@ import employeeSalaryRoutes from "./routes/employeeSalaryRoutes.js";
 import employeeTreeRoutes from "./routes/employeeTreeRoutes.js";
 import employeedashboardRoutes from "./routes/employeeDashboardRoutes.js";
 import eventsCalendarRoutes from "./routes/eventsCalendarRoutes.js";
+import projectChartRoutes from "./routes/projectChartRoutes.js";
 
 
 dotenv.config();
@@ -35,6 +36,7 @@ app.use("/api", employeeSalaryRoutes);
 app.use("/api", employeeTreeRoutes);
 app.use("/api/dashboard-charts", employeedashboardRoutes);
 app.use("/api/dashboard-charts", eventsCalendarRoutes);
+app.use("/api/projects", projectChartRoutes);
 
 
 // Global error handler

@@ -8,6 +8,7 @@ export const getEmployeeStats = async (req, res) => {
         // Get year (default = current year)
         const today = new Date();
         const year = parseInt(req.query.year) || today.getFullYear();
+        const projectYear = req.query.year ? parseInt(req.query.year) : null;
 
         // Today / Yesterday
         const todayDate = new Date();
@@ -28,6 +29,7 @@ export const getEmployeeStats = async (req, res) => {
             .input("Today", sql.VarChar, todayStr)
             .input("Yesterday", sql.VarChar, yesterdayStr)
             .input("Year", sql.Int, year)
+            .input("ProjectYear", sql.Int, projectYear) // used for total projects
             .query(`
                 DECLARE @TodayDate DATE = TRY_CONVERT(date, @Today, 103);
                 DECLARE @YesterdayDate DATE = TRY_CONVERT(date, @Yesterday, 103);
@@ -91,15 +93,30 @@ export const getEmployeeStats = async (req, res) => {
                        AND EmployeeId NOT IN (6, 9)
                     ) AS CheckedInToday,
 
-                    -- LATE TODAY (check-in after 9:00 AM)
-                    (SELECT COUNT(DISTINCT EmployeeId)
-                     FROM tbl_EmployeeCheck
-                     WHERE TRY_CONVERT(date, Dated, 103) = @TodayDate
-                       AND IsDeleted = 0
-                       AND (IsLeave = 0 OR IsLeave IS NULL)
-                       AND EmployeeId NOT IN (6, 9)
-                       AND CAST(CONVERT(varchar, TRY_CONVERT(datetime, Dated, 103), 108) AS time) > '09:00:00'
-                    ) AS LateToday,
+                    -- LATE TODAY (CORRECT COLUMN: CheckInTime)
+(
+    SELECT COUNT(DISTINCT EmployeeId)
+    FROM tbl_EmployeeCheck
+    WHERE 
+        CAST(Dated AS date) = @TodayDate
+        AND IsDeleted = 0
+        AND (IsLeave = 0 OR IsLeave IS NULL)
+        AND EmployeeId NOT IN (6, 9)
+        AND (
+            -- Normal employees late after 9:00 AM
+            (
+                EmployeeId <> 25
+                AND CAST(CheckInTime AS time) > '09:00:00'
+            )
+            OR
+            -- Employee 25 late only after 1:30 PM
+            (
+                EmployeeId = 25
+                AND CAST(CheckInTime AS time) > '13:30:00'
+            )
+        )
+) AS LateToday
+,
 
                     -- ON LEAVE TODAY
                     (SELECT COUNT(DISTINCT EmployeeId)
@@ -142,16 +159,32 @@ export const getEmployeeStats = async (req, res) => {
                        AND YEAR(TRY_CONVERT(date, ReleaseDate, 103)) = @Year
                     ) AS ResignedThisYear,
 
-                    -- ⭐ FIXED PENDING LEAVES QUERY USING CTE RESULT
-                    (
-                        SELECT COUNT(*) 
-                        FROM tbl_LeaveDetails L
-                        INNER JOIN EligibleEmployees EE ON EE.EmployeeId = L.EmployeeId
-                        WHERE 
-                            L.ApprovalStatus = 0
-                            AND CAST(L.NoOfDays AS FLOAT) >= 0.5
-                            AND YEAR(TRY_CONVERT(date, L.StartDate, 103)) = @Year
-                    ) AS PendingLeaves
+                    -- ⭐ DYNAMIC PENDING LEAVES (ALWAYS MATCH DB)
+(
+    SELECT COUNT(*) 
+    FROM tbl_LeaveDetails L
+    WHERE 
+        L.ApprovalStatus = 0
+        AND CAST(L.NoOfDays AS FLOAT) >= 0.5
+        AND YEAR(TRY_CONVERT(date, L.StartDate, 103)) = @Year
+) AS PendingLeaves,
+ 
+                
+-- TOTAL PROJECTS (all, ignoring year)
+(
+    SELECT COUNT(*)
+    FROM tbl_Project
+    WHERE IsDeleted = 0
+) AS TotalProjects,
+
+-- CURRENT YEAR TOTAL PROJECTS
+(
+    SELECT COUNT(*)
+    FROM tbl_Project
+    WHERE IsDeleted = 0
+      AND YEAR(TRY_CONVERT(date, DateofProject, 103)) = @Year
+) AS CurrentyeartotalProjects
+
             `);
 
         const stats = result.recordset[0];
@@ -174,7 +207,9 @@ export const getEmployeeStats = async (req, res) => {
             prevOnLeave: stats.PrevOnLeave,
             pendingLeaves: stats.PendingLeaves,
             hiringThisYear: stats.HiringThisYear,
-            resignedThisYear: stats.ResignedThisYear
+            resignedThisYear: stats.ResignedThisYear,
+            totalProjects: stats.TotalProjects,
+              CurrentyeartotalProjects: stats.CurrentyeartotalProjects
         });
 
     } catch (err) {

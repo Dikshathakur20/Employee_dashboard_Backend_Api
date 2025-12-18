@@ -39,10 +39,15 @@ const getActiveEmployees = async () => {
   const pool = await poolPromise;
 
   const query = `
-    SELECT EmployeeId, Name, JoiningDate
+    SELECT 
+      EmployeeId,
+      Name,
+      Designation,
+      JoiningDate
     FROM tbl_Employees
     WHERE IsDeleted = 0
       AND ActiveId = 1
+      AND EmployeeId NOT IN (6, 9)
       AND JoiningDate IS NOT NULL
       AND JoiningDate != '';
   `;
@@ -53,39 +58,64 @@ const getActiveEmployees = async () => {
   return result.recordset.map(emp => {
     const start = parseDate(emp.JoiningDate);
 
-    if (!start) {
-      return {
-        name: emp.Name,
-        experience: "N/A"
-      };
+    // -------- EXPERIENCE LOGIC (unchanged) --------
+    let experience = "N/A";
+
+    if (start) {
+      let years = now.getFullYear() - start.getFullYear();
+      let months = now.getMonth() - start.getMonth();
+
+      if (months < 0) {
+        years--;
+        months += 12;
+      }
+
+      if (years < 1) {
+        experience = `${months} months`;
+      } else if (months === 0) {
+        experience = `${years} years`;
+      } else {
+        experience = `${years} years ${months} months`;
+      }
     }
 
-    let years = now.getFullYear() - start.getFullYear();
-    let months = now.getMonth() - start.getMonth();
-
-    if (months < 0) {
-      years--;
-      months += 12;
-    }
-
-    if (years < 1) {
-      return {
-        name: emp.Name,
-        experience: `${months} months`
-      };
-    } else if (months === 0) {
-      return {
-        name: emp.Name,
-        experience: `${years} years`
-      };
-    } else {
-      return {
-        name: emp.Name,
-        experience: `${years} years ${months} months`
-      };
-    }
+    // -------- RETURN DASHBOARD EMPLOYEE --------
+    return {
+      id: "emp_" + emp.EmployeeId,
+      name: emp.Name,
+      role: emp.Designation,
+      experience,
+      profileImage: `${process.env.BASE_URL || "https://employee-dashboard-backend-api.vercel.app/api"}/employee/image/${emp.EmployeeId}`
+    };
   });
 };
+
+export const getEmployeeImage = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const pool = await poolPromise;
+
+    const result = await pool.request()
+      .input("EmployeeId", id)
+      .query(`
+        SELECT Picture
+        FROM tbl_Employees
+        WHERE EmployeeId = @EmployeeId AND IsDeleted = 0
+      `);
+
+    if (!result.recordset[0] || !result.recordset[0].Picture) {
+      return res.status(404).send("Image not found");
+    }
+
+    res.set("Content-Type", "image/jpeg");
+    res.send(result.recordset[0].Picture);
+
+  } catch (error) {
+    console.error("Error fetching employee image:", error);
+    res.status(500).send("Server error while fetching image");
+  }
+};
+
 
 
 

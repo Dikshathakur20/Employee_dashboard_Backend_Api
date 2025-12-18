@@ -3,6 +3,6 @@ import { getEmployeeStats } from "../controllers/employeeStatsController.js";
 import { authMiddleware } from "../middleware/authMiddleware.js";
 const router = express.Router();
 
-router.get("/employee-stats", authMiddleware,getEmployeeStats);
+router.get("/employee-stats",getEmployeeStats);
 
 export default router;
