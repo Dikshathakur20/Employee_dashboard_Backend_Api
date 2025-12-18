@@ -22,9 +22,9 @@ export const getProjectChartData = async (req, res) => {
     `);
 
     const rows = result.recordset;
+
     const baseUrl =
-      process.env.BASE_URL ||
-      "https://employee-dashboard-backend-api.vercel.app/api";
+      process.env.BASE_URL || "http://localhost:5000/api";
 
     const yearMap = {};
 
@@ -34,7 +34,7 @@ export const getProjectChartData = async (req, res) => {
       const year = new Date(p.DateofProject).getFullYear().toString();
       const category = p.ProjectCategories || "Others";
 
-      // 1️⃣ Year level
+      // Year level
       if (!yearMap[year]) {
         yearMap[year] = {
           category: year,
@@ -42,9 +42,9 @@ export const getProjectChartData = async (req, res) => {
           subData: {}
         };
       }
-      yearMap[year].value += 1;
+      yearMap[year].value++;
 
-      // 2️⃣ Category level
+      // Category level
       if (!yearMap[year].subData[category]) {
         yearMap[year].subData[category] = {
           category,
@@ -52,14 +52,14 @@ export const getProjectChartData = async (req, res) => {
           projects: []
         };
       }
-      yearMap[year].subData[category].value += 1;
+      yearMap[year].subData[category].value++;
 
-      // 3️⃣ Project level
+      // Project level
       yearMap[year].subData[category].projects.push({
         name: p.ProjectName,
         startDate: p.DateofProject,
         endDate: p.ProjectEndDate,
-        url: p.URL, // stored as-is
+        url: p.URL,
         image: p.ProjectImage
           ? `${baseUrl}/projects/image/${p.ProjectID}`
           : null,
@@ -67,11 +67,10 @@ export const getProjectChartData = async (req, res) => {
       });
     });
 
-    // Convert maps to arrays
-    const chartData = Object.values(yearMap).map((yearItem) => ({
-      category: yearItem.category,
-      value: yearItem.value,
-      subData: Object.values(yearItem.subData)
+    const chartData = Object.values(yearMap).map((y) => ({
+      category: y.category,
+      value: y.value,
+      subData: Object.values(y.subData)
     }));
 
     return res.status(200).json({
@@ -81,17 +80,17 @@ export const getProjectChartData = async (req, res) => {
 
   } catch (error) {
     console.error("Project Chart Error:", error);
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
-      message: "Server error while fetching project chart data",
+      message: "Server error",
       error: error.message
     });
   }
 };
 
-// ----------------------------------------------------
-// 🔹 Fetch project image (same pattern as employee image)
-// ----------------------------------------------------
+// ------------------------------------------------
+// Project Image API
+// ------------------------------------------------
 export const getProjectImage = async (req, res) => {
   try {
     const { id } = req.params;
@@ -102,10 +101,11 @@ export const getProjectImage = async (req, res) => {
       .query(`
         SELECT ProjectImage
         FROM tbl_Project
-        WHERE ProjectID = @ProjectID AND IsDeleted = 0
+        WHERE ProjectID = @ProjectID
+          AND IsDeleted = 0
       `);
 
-    if (!result.recordset[0] || !result.recordset[0].ProjectImage) {
+    if (!result.recordset[0]?.ProjectImage) {
       return res.status(404).send("Image not found");
     }
 
@@ -113,7 +113,7 @@ export const getProjectImage = async (req, res) => {
     res.send(result.recordset[0].ProjectImage);
 
   } catch (error) {
-    console.error("Error fetching project image:", error);
-    res.status(500).send("Server error while fetching image");
+    console.error("Project Image Error:", error);
+    res.status(500).send("Server error");
   }
 };

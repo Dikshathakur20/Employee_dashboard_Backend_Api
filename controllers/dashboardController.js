@@ -47,7 +47,6 @@ const getActiveEmployees = async () => {
     FROM tbl_Employees
     WHERE IsDeleted = 0
       AND ActiveId = 1
-      AND EmployeeId NOT IN (6, 9)
       AND JoiningDate IS NOT NULL
       AND JoiningDate != '';
   `;
