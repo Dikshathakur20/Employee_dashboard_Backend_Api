@@ -13,7 +13,7 @@ export const getProjectChartData = async (req, res) => {
         URL,
         DateofProject,
         ProjectEndDate,
-        ProjectTechnologies,
+        SubCategories,
         SmallDescription
       FROM tbl_Project
       WHERE IsDeleted = 0
@@ -34,7 +34,7 @@ export const getProjectChartData = async (req, res) => {
   const year = new Date(p.DateofProject).getFullYear().toString();
 
   // ✅ TECHNOLOGY-BASED CATEGORY
-  const technology = p.ProjectTechnologies || "Others";
+  const technology = p.SubCategories || "Others";
 
   // Year level
   if (!yearMap[year]) {
