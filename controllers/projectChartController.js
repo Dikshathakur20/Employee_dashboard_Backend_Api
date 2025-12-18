@@ -13,7 +13,7 @@ export const getProjectChartData = async (req, res) => {
         URL,
         DateofProject,
         ProjectEndDate,
-        ProjectCategories,
+        ProjectTechnologies,
         SmallDescription
       FROM tbl_Project
       WHERE IsDeleted = 0
@@ -29,43 +29,45 @@ export const getProjectChartData = async (req, res) => {
     const yearMap = {};
 
     rows.forEach((p) => {
-      if (!p.DateofProject) return;
+  if (!p.DateofProject) return;
 
-      const year = new Date(p.DateofProject).getFullYear().toString();
-      const category = p.ProjectCategories || "Others";
+  const year = new Date(p.DateofProject).getFullYear().toString();
 
-      // Year level
-      if (!yearMap[year]) {
-        yearMap[year] = {
-          category: year,
-          value: 0,
-          subData: {}
-        };
-      }
-      yearMap[year].value++;
+  // ✅ TECHNOLOGY-BASED CATEGORY
+  const technology = p.ProjectTechnologies || "Others";
 
-      // Category level
-      if (!yearMap[year].subData[category]) {
-        yearMap[year].subData[category] = {
-          category,
-          value: 0,
-          projects: []
-        };
-      }
-      yearMap[year].subData[category].value++;
+  // Year level
+  if (!yearMap[year]) {
+    yearMap[year] = {
+      category: year,
+      value: 0,
+      subData: {}
+    };
+  }
+  yearMap[year].value++;
 
-      // Project level
-      yearMap[year].subData[category].projects.push({
-        name: p.ProjectName,
-        startDate: p.DateofProject,
-        endDate: p.ProjectEndDate,
-        url: p.URL,
-        image: p.ProjectImage
-          ? `${baseUrl}/projects/image/${p.ProjectID}`
-          : null,
-        smallDescription: p.SmallDescription
-      });
-    });
+  // Technology level
+  if (!yearMap[year].subData[technology]) {
+    yearMap[year].subData[technology] = {
+      category: technology,
+      value: 0,
+      projects: []
+    };
+  }
+  yearMap[year].subData[technology].value++;
+
+  // Project level
+  yearMap[year].subData[technology].projects.push({
+    name: p.ProjectName,
+    startDate: p.DateofProject,
+    endDate: p.ProjectEndDate,
+    url: p.URL,
+    image: p.ProjectImage
+      ? `${baseUrl}/projects/image/${p.ProjectID}`
+      : null,
+    smallDescription: p.SmallDescription
+  });
+});
 
     const chartData = Object.values(yearMap).map((y) => ({
       category: y.category,
