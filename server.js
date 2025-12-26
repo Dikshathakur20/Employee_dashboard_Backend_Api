@@ -15,6 +15,12 @@ import employeeTreeRoutes from "./routes/employeeTreeRoutes.js";
 import employeedashboardRoutes from "./routes/employeeDashboardRoutes.js";
 import eventsCalendarRoutes from "./routes/eventsCalendarRoutes.js";
 import projectChartRoutes from "./routes/projectChartRoutes.js";
+import authRoutes from './routes/authRoutes.js';
+import employeeLeaveRoutes from "./routes/employeeLeaveRoutes.js";
+import employeeCheckinRoutes from "./routes/employeeCheckinRoutes.js";
+import employeeCheckoutRoutes from "./routes/employeeCheckoutRoutes.js";
+import employeeWorkReportRoutes from "./routes/employeeWorkReportRoutes.js"
+import employeeLeaveStatusRoutes from "./routes/employeeLeaveStatusRoutes.js"; // correct path
 
 
 dotenv.config();
@@ -37,8 +43,13 @@ app.use("/api", employeeTreeRoutes);
 app.use("/api/dashboard-charts", employeedashboardRoutes);
 app.use("/api/dashboard-charts", eventsCalendarRoutes);
 app.use("/api/projects", projectChartRoutes);
+app.use('/api/auth', authRoutes);
 
-
+app.use("/api/employee-leaves", employeeLeaveRoutes);
+app.use("/api/employee", employeeCheckinRoutes);
+app.use("/api/employee", employeeCheckoutRoutes);
+app.use("/api/employee", employeeWorkReportRoutes);
+app.use("/api/employee", employeeLeaveStatusRoutes);
 // Global error handler
 app.use((err, req, res, next) => {
   console.error(err.stack);
